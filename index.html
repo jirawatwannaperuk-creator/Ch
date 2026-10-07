@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d2d63">
+<title>สแกนเช็คชื่อเข้าแถว</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-tab="face">
+
+<header class="top">
+  <img id="logo" alt="" hidden referrerpolicy="no-referrer">
+  <div class="who">
+    <b id="orgName">ระบบสแกนเช็คชื่อเข้าแถว</b>
+    <span id="dateTxt">กำลังเชื่อมต่อ...</span>
+  </div>
+  <time id="clock">--:--:--</time>
+</header>
+
+<nav class="tabs" id="tabs" aria-label="โหมดการทำงาน">
+  <button type="button" data-tab="face" class="on">สแกนใบหน้า</button>
+  <button type="button" data-tab="qr">สแกน QR</button>
+  <button type="button" data-tab="enroll">ลงทะเบียนใบหน้า</button>
+</nav>
+
+<div class="wrap">
+
+  <div id="fatal" class="msg err" hidden></div>
+
+  <div class="bar scanonly" id="bar">
+    <label>สแกนให้
+      <select id="pType">
+        <option value="student">นักศึกษา</option>
+        <option value="teacher">ครู</option>
+      </select>
+    </label>
+    <label>กล้อง
+      <select id="camSel">
+        <option value="user">กล้องหน้า</option>
+        <option value="environment">กล้องหลัง</option>
+      </select>
+    </label>
+  </div>
+
+  <!-- ================= สแกนใบหน้า ================= -->
+  <section id="tab-face" class="panel on">
+    <div class="vwrap"><video id="camFace" autoplay muted playsinline></video><i class="guide"></i></div>
+    <div class="row">
+      <button type="button" id="btnFaceStart" class="btn go">เริ่มสแกนใบหน้า</button>
+      <button type="button" id="btnFaceStop" class="btn stop" disabled>หยุด</button>
+    </div>
+    <div id="faceMsg" class="msg warn">กด "เริ่มสแกนใบหน้า" แล้วมองกล้อง</div>
+  </section>
+
+  <!-- ================= สแกน QR ================= -->
+  <section id="tab-qr" class="panel">
+    <div id="reader"></div>
+    <div class="row">
+      <button type="button" id="btnQrStart" class="btn go">เปิดกล้องสแกน QR</button>
+      <button type="button" id="btnQrStop" class="btn stop" disabled>หยุด</button>
+    </div>
+    <input id="manual" class="full" placeholder="หรือพิมพ์รหัส / โทเคน แล้วกด Enter (ใช้กับเครื่องสแกน USB ได้)" autocomplete="off">
+    <div id="qrMsg" class="msg warn">กด "เปิดกล้องสแกน QR" หรือพิมพ์รหัส</div>
+  </section>
+
+  <!-- ================= ลงทะเบียนใบหน้า ================= -->
+  <section id="tab-enroll" class="panel">
+    <div class="enroll">
+      <div>
+        <div class="vwrap"><video id="camEnroll" autoplay muted playsinline></video><i class="guide"></i></div>
+        <div class="shots" id="shots" aria-label="จำนวนภาพที่เก็บแล้ว"><span></span><span></span><span></span></div>
+      </div>
+      <div class="form">
+        <label>ประเภท
+          <select id="eType">
+            <option value="student">นักศึกษา</option>
+            <option value="teacher">ครู</option>
+          </select>
+        </label>
+        <label>ค้นหาชื่อ / รหัส
+          <input id="eSearch" placeholder="พิมพ์เพื่อกรองรายชื่อ" autocomplete="off">
+        </label>
+        <label>เลือกบุคคล
+          <select id="ePerson" size="6"></select>
+        </label>
+        <div class="row left">
+          <button type="button" id="btnECam" class="btn">เปิดกล้อง</button>
+          <button type="button" id="btnECap" class="btn go">เก็บใบหน้า</button>
+          <button type="button" id="btnEStop" class="btn stop">ปิดกล้อง</button>
+        </div>
+        <div id="eMsg" class="msg warn">เลือกบุคคล เปิดกล้อง แล้วกด "เก็บใบหน้า" 3 ครั้ง โดยหันหน้าตรง ซ้าย และขวาเล็กน้อย</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ผลการสแกน ================= -->
+  <section id="result" class="result idle scanonly" aria-live="polite">
+    <img id="rPhoto" alt="" hidden referrerpolicy="no-referrer">
+    <div class="rtxt">
+      <b id="rName">รอการสแกน</b>
+      <span id="rSub"></span>
+      <span id="rNote"></span>
+    </div>
+    <div class="rst">
+      <strong id="rStatus"></strong>
+      <time id="rTime"></time>
+    </div>
+  </section>
+
+  <section class="logcard scanonly">
+    <h2>รายการล่าสุดในเครื่องนี้</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>เวลา</th><th class="l">ชื่อ</th><th>แผนก</th><th>สถานะ</th></tr></thead>
+        <tbody id="log"><tr class="empty"><td colspan="4">ยังไม่มีการสแกน</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<!-- ================= กรอก PIN ================= -->
+<div id="gate" class="gate" hidden>
+  <form id="gateForm" class="gbox" autocomplete="off">
+    <h3 id="gateTitle">ใส่ PIN</h3>
+    <p id="gateHint"></p>
+    <input id="gatePin" type="password" inputmode="numeric" autocomplete="off" aria-label="PIN">
+    <div id="gateMsg" class="gmsg"></div>
+    <div class="row">
+      <button type="button" id="gateCancel" class="btn" hidden>ยกเลิก</button>
+      <button type="submit" class="btn go">ยืนยัน</button>
+    </div>
+  </form>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
