@@ -8,7 +8,7 @@
  * (repo บน GitHub เป็นสาธารณะ ห้ามเขียน PIN ลงไฟล์)
  */
 window.APP_CONFIG = {
-  GAS_URL: "https://script.google.com/macros/s/XXXXXXXXXXXXXXXX/exec",
+  GAS_URL: "https://script.google.com/macros/s/AKfycbypb-aB5LS6F_rVCSOdoDbCaxtXlunJfPDaN3uHbd6FTxnZQ5LbFU_xDVekrRyJKSto3w/exec",
 
   FACE_INTERVAL: 900   // ตรวจใบหน้าทุกกี่มิลลิวินาที (เครื่องช้าให้เพิ่มเป็น 1200-1500)
 };
