@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>สแกนใบหน้าเช็คชื่อ — วิทยาลัยการอาชีพชุมพวง</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:'Sarabun','Noto Sans Thai',sans-serif;background:#eef4fc;color:#14233f}
+header{background:linear-gradient(180deg,#0e3f94,#0a2d6e);color:#fff;padding:12px 16px}
+header b{font-size:17px}header small{display:block;opacity:.8;font-size:12px}
+main{max-width:720px;margin:0 auto;padding:12px}
+.tabs{display:flex;gap:8px;margin-bottom:10px}
+.tabs button{flex:1;padding:10px;border:1px solid #cfd9ee;background:#fff;border-radius:10px;font:inherit;font-weight:700;cursor:pointer}
+.tabs button.on{background:#1e4fd8;color:#fff;border-color:#1e4fd8}
+.cam{position:relative;background:#000;border-radius:14px;overflow:hidden;aspect-ratio:4/3}
+.cam video,.cam canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cam video{transform:scaleX(-1)}
+.cam canvas{transform:scaleX(-1)}
+#msg{position:absolute;left:0;right:0;bottom:0;padding:8px 12px;background:rgba(0,0,0,.55);color:#fff;font-size:14px;text-align:center}
+.card{background:#fff;border-radius:14px;padding:14px;margin-top:12px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.res{display:none;border-left:6px solid #0f9d58}
+.res.late{border-color:#f6a609}.res.err{border-color:#d93025}
+.res h2{margin:0 0 4px;font-size:20px}.res p{margin:0;color:#4a5878}
+label{display:block;font-size:13px;font-weight:700;margin:10px 0 4px}
+select,input,button.go{width:100%;padding:10px;border:1px solid #cfd9ee;border-radius:10px;font:inherit;background:#fff}
+button.go{background:#1e4fd8;color:#fff;border:0;font-weight:700;cursor:pointer;margin-top:12px}
+button.go:disabled{opacity:.5}
+.hide{display:none}
+#camBtn{position:absolute;top:10px;right:10px;z-index:2;padding:8px 14px;border:0;border-radius:20px;background:rgba(0,0,0,.6);color:#fff;font:inherit;font-weight:700;cursor:pointer}
+#camBtn.off{background:#1e4fd8}
+.cam.off video,.cam.off canvas{display:none}
+.log{max-height:180px;overflow:auto;font-size:13px;color:#4a5878}
+.log div{padding:4px 0;border-bottom:1px solid #eef1f7}
+</style>
+</head>
+<body>
+<header><b>สแกนใบหน้าเช็คชื่อเข้าแถว</b><small>วิทยาลัยการอาชีพชุมพวง</small></header>
+<main>
+  <div class="tabs">
+    <button id="tScan" class="on">สแกนเช็คชื่อ</button>
+    <button id="tEnroll">ลงทะเบียนใบหน้า</button>
+  </div>
+
+  <div class="cam"><video id="v" autoplay muted playsinline></video><canvas id="c"></canvas><div id="msg">กำลังเริ่มระบบ…</div><button id="camBtn" type="button">ปิดกล้อง</button></div>
+
+  <div id="res" class="card res"><h2 id="rName"></h2><p id="rSub"></p></div>
+
+  <div id="pScan" class="card"><b>รายการล่าสุด</b><div id="log" class="log"></div></div>
+
+  <div id="pEnroll" class="card hide">
+    <label>กลุ่ม</label>
+    <select id="eGroup"><option value="A">A — ช่างยนต์ / ไฟฟ้า / อิเล็กทรอนิกส์</option><option value="B">B — ช่างกลโรงงาน / บัญชี / โลจิสติกส์</option><option value="C">C — ธุรกิจดิจิทัล / อาหารและโภชนาการ</option><option value="D">D — ครูและบุคลากร</option></select>
+    <label>ค้นหา (รหัสหรือชื่อ)</label>
+    <input id="eSearch" placeholder="พิมพ์เพื่อค้นหา">
+    <label>เลือกบุคคล</label>
+    <select id="eWho" size="6"></select>
+    <label>รหัสผ่านผู้ดูแล</label>
+    <input id="ePin" type="password" autocomplete="off">
+    <button class="go" id="eGo">ถ่ายใบหน้า 3 ภาพ แล้วบันทึก</button>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js"></script>
+<script>
+/* ====== ตั้งค่า: ใส่ URL Web App (ลงท้าย /exec) ====== */
+const API_URL = 'https://script.google.com/macros/s/ใส่_DEPLOYMENT_ID_ที่นี่/exec';
+const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model/';
+const MATCH_DIST = 0.5;     // ยิ่งน้อยยิ่งเข้มงวด (0.4–0.6)
+const NEED_HITS  = 3;       // ต้องจับคู่คนเดิมติดกันกี่เฟรมจึงบันทึก
+const COOLDOWN_MS = 6000;
+
+const $ = id => document.getElementById(id);
+const opt = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+let mode = 'scan', matcher = null, people = {}, busy = false, streak = { code: null, n: 0 }, cool = {};
+let roster = [], camOn = false, stream = null, looping = false;
+
+function say(t){ $('msg').textContent = t; }
+async function api(params){
+  const r = await fetch(API_URL + '?' + new URLSearchParams(params));
+  return r.json();
+}
+async function post(body){
+  const r = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(body) });
+  return r.json();
+}
+
+async function loadFaces(){
+  const j = await api({ api:'faces' });
+  if (!j.ok) throw new Error(j.error);
+  people = {};
+  const labeled = j.faces.map(f => {
+    people[f.code] = f;
+    return new faceapi.LabeledFaceDescriptors(f.code, f.d.map(a => new Float32Array(a)));
+  });
+  matcher = labeled.length ? new faceapi.FaceMatcher(labeled, MATCH_DIST) : null;
+  return labeled.length;
+}
+
+function showRes(kind, title, sub){
+  const el = $('res'); el.style.display = 'block';
+  el.className = 'card res' + (kind === 'late' ? ' late' : kind === 'err' ? ' err' : '');
+  $('rName').textContent = title; $('rSub').textContent = sub;
+}
+function addLog(t){
+  const d = document.createElement('div'); d.textContent = t;
+  $('log').prepend(d);
+}
+
+async function submit(code){
+  const p = people[code]; busy = true;
+  say('กำลังบันทึก…');
+  try{
+    const j = await post({ api:'checkin', group:p.g, code:code });
+    if (!j.ok) throw new Error(j.error);
+    if (j.already){ showRes('ok', j.name, 'เช็คชื่อไว้แล้วเมื่อ ' + j.time + ' น.'); }
+    else {
+      showRes(j.status === 'สาย' ? 'late' : 'ok', j.name, 'เช็คชื่อสำเร็จ • ' + j.status + ' • ' + j.time + ' น.');
+      addLog(j.time + '  ' + j.name + '  (' + j.status + ')');
+    }
+  }catch(e){ showRes('err','บันทึกไม่สำเร็จ', e.message); }
+  cool[code] = Date.now(); busy = false; streak = { code:null, n:0 };
+}
+
+async function loop(){
+  if (!camOn){ looping = false; return; }
+  looping = true;
+  const v = $('v'), c = $('c');
+  if (v.readyState >= 2){
+    if (c.width !== v.videoWidth){ c.width = v.videoWidth; c.height = v.videoHeight; }
+    const det = await faceapi.detectSingleFace(v, opt).withFaceLandmarks().withFaceDescriptor();
+    const g = c.getContext('2d'); g.clearRect(0,0,c.width,c.height);
+    if (det){
+      const b = det.detection.box;
+      g.lineWidth = 3; g.strokeStyle = '#4ade80'; g.strokeRect(b.x,b.y,b.width,b.height);
+      if (mode === 'scan' && !busy){
+        if (!matcher){ say('ยังไม่มีข้อมูลใบหน้าในระบบ — ไปที่แท็บลงทะเบียน'); }
+        else {
+          const m = matcher.findBestMatch(det.descriptor);
+          if (m.label === 'unknown'){ say('ไม่รู้จักใบหน้านี้'); streak = { code:null, n:0 }; }
+          else {
+            const code = m.label;
+            streak = (streak.code === code) ? { code, n: streak.n + 1 } : { code, n: 1 };
+            say(people[code].name + ' (กำลังยืนยัน ' + streak.n + '/' + NEED_HITS + ')');
+            if (streak.n >= NEED_HITS && (!cool[code] || Date.now() - cool[code] > COOLDOWN_MS)) submit(code);
+          }
+        }
+      } else if (mode === 'enroll'){ say('พบใบหน้า — พร้อมถ่าย'); }
+    } else if (!busy){ say(mode === 'scan' ? 'มองกล้องตรงๆ เพื่อเช็คชื่อ' : 'เลือกบุคคลแล้วกดถ่าย'); streak = { code:null, n:0 }; }
+  }
+  setTimeout(loop, 150);
+}
+
+/* ====== เปิด / ปิดกล้อง ====== */
+async function startCam(){
+  say('กำลังเปิดกล้อง…');
+  stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user', width:640, height:480 }, audio:false });
+  $('v').srcObject = stream;
+  camOn = true; streak = { code:null, n:0 };
+  document.querySelector('.cam').classList.remove('off');
+  $('camBtn').textContent = 'ปิดกล้อง'; $('camBtn').classList.remove('off');
+  say(mode === 'scan' ? 'มองกล้องตรงๆ เพื่อเช็คชื่อ' : 'เลือกบุคคลแล้วกดถ่าย');
+  if (!looping) loop();
+}
+function stopCam(){
+  camOn = false;
+  if (stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
+  $('v').srcObject = null;
+  const c = $('c'); c.getContext('2d').clearRect(0, 0, c.width, c.height);
+  document.querySelector('.cam').classList.add('off');
+  $('camBtn').textContent = 'เปิดกล้อง'; $('camBtn').classList.add('off');
+  say('ปิดกล้องแล้ว');
+}
+async function toggleCam(){
+  try{ if (camOn) stopCam(); else await startCam(); }
+  catch(e){ say('เปิดกล้องไม่ได้: ' + e.message); }
+}
+
+/* ====== ลงทะเบียน ====== */
+async function loadRoster(){
+  $('eWho').innerHTML = '<option>กำลังโหลด…</option>';
+  try{
+    const j = await api({ api:'roster', group:$('eGroup').value });
+    if (!j.ok) throw new Error(j.error);
+    roster = j.roster; renderRoster();
+  }catch(e){ $('eWho').innerHTML = '<option>โหลดไม่สำเร็จ: ' + e.message + '</option>'; }
+}
+function renderRoster(){
+  const q = $('eSearch').value.trim().toLowerCase();
+  const sel = $('eWho'); sel.innerHTML = '';
+  roster.filter(r => !q || (r.code + ' ' + r.name).toLowerCase().includes(q)).slice(0,300).forEach(r => {
+    const o = document.createElement('option');
+    o.value = r.code; o.textContent = (r.has ? '✅ ' : '⬜ ') + r.code + ' — ' + r.name + ' (' + r.dept + ')';
+    sel.appendChild(o);
+  });
+}
+async function enroll(){
+  const code = $('eWho').value, pin = $('ePin').value;
+  if (!camOn){ return alert('กรุณาเปิดกล้องก่อน'); }
+  if (!code){ return alert('เลือกบุคคลก่อน'); }
+  if (!pin){ return alert('ใส่รหัสผ่านผู้ดูแล'); }
+  const btn = $('eGo'); btn.disabled = true;
+  const ds = [];
+  for (let i = 0; i < 3; i++){
+    say('ถ่ายภาพที่ ' + (i+1) + '/3 — ขยับหน้าเล็กน้อย');
+    await new Promise(r => setTimeout(r, 900));
+    const d = await faceapi.detectSingleFace($('v'), opt).withFaceLandmarks().withFaceDescriptor();
+    if (!d){ i--; continue; }
+    ds.push(Array.from(d.descriptor));
+  }
+  try{
+    const j = await post({ api:'enroll', group:$('eGroup').value, code, pin, descriptors: ds });
+    if (!j.ok) throw new Error(j.error);
+    showRes('ok', 'บันทึกใบหน้าแล้ว', j.name);
+    await loadRoster(); await loadFaces();
+  }catch(e){ showRes('err','ลงทะเบียนไม่สำเร็จ', e.message); }
+  btn.disabled = false;
+}
+
+function setMode(m){
+  mode = m;
+  $('tScan').className = m === 'scan' ? 'on' : ''; $('tEnroll').className = m === 'enroll' ? 'on' : '';
+  $('pScan').classList.toggle('hide', m !== 'scan'); $('pEnroll').classList.toggle('hide', m !== 'enroll');
+  if (m === 'enroll' && !roster.length) loadRoster();
+}
+
+(async function init(){
+  try{
+    if (API_URL.indexOf('ใส่_DEPLOYMENT') >= 0) throw new Error('ยังไม่ได้ตั้งค่า API_URL ในไฟล์ index.html');
+    say('กำลังโหลดโมเดล…');
+    await Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+    ]);
+    await startCam();
+    say('กำลังโหลดข้อมูลใบหน้า…');
+    const n = await loadFaces();
+    say('พร้อมใช้งาน — ลงทะเบียนแล้ว ' + n + ' คน');
+    setInterval(() => { if (!busy) loadFaces().catch(()=>{}); }, 300000);
+  }catch(e){ say('ผิดพลาด: ' + e.message); }
+})();
+
+$('camBtn').onclick = toggleCam;
+$('tScan').onclick = () => setMode('scan');
+$('tEnroll').onclick = () => setMode('enroll');
+$('eGroup').onchange = loadRoster;
+$('eSearch').oninput = renderRoster;
+$('eGo').onclick = enroll;
+</script>
+</body>
+</html>
